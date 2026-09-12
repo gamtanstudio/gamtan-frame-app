@@ -79,7 +79,59 @@
             android:textColorHint="#5C544C"
             android:textSize="15sp"
             android:inputType="text"
-            android:layout_marginBottom="28dp" />
+            android:layout_marginBottom="22dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="화면 방향"
+            android:textColor="#B08D57"
+            android:textSize="13sp"
+            android:paddingBottom="4dp" />
+
+        <RadioGroup
+            android:id="@+id/orient"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginBottom="28dp">
+
+            <RadioButton
+                android:id="@+id/o_sensor"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#F2EDE4"
+                android:text="자동회전 (기기에 센서 있을 때만)" />
+
+            <RadioButton
+                android:id="@+id/o_portrait"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#F2EDE4"
+                android:text="세로" />
+
+            <RadioButton
+                android:id="@+id/o_portrait_rev"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#F2EDE4"
+                android:text="세로 (뒤집힘)" />
+
+            <RadioButton
+                android:id="@+id/o_landscape"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#F2EDE4"
+                android:text="가로" />
+
+            <RadioButton
+                android:id="@+id/o_landscape_rev"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#F2EDE4"
+                android:text="가로 (뒤집힘)" />
+
+        </RadioGroup>
 
         <Button
             android:id="@+id/save"

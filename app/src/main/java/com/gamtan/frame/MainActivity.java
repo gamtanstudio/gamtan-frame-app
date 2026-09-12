@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ActivityInfo;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -57,6 +58,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean autoWifiOpened = false;
+    private int offlineTicks = 0;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -75,6 +77,8 @@ public class MainActivity extends Activity {
             finish();
             return;
         }
+
+        applyOrientation();
 
         web = new WebView(this);
         setContentView(web);
@@ -107,16 +111,26 @@ public class MainActivity extends Activity {
      * transient drop does not keep popping settings in the parents' face.
      */
     private void scheduleAutoWifi() {
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                if (!autoWifiOpened && !isOnline()) {
-                    autoWifiOpened = true;
-                    openWifiSettingsInternal();
-                }
-            }
-        }, 15000);
+        handler.postDelayed(autoWifiChecker, 8000);
     }
+
+    // Checks connectivity repeatedly. As soon as the device is online it stops
+    // (never opens settings). Only if it stays offline for ~40s straight does it
+    // open Wi-Fi settings, and only once per launch.
+    private final Runnable autoWifiChecker = new Runnable() {
+        @Override
+        public void run() {
+            if (autoWifiOpened) return;
+            if (isOnline()) { offlineTicks = 0; return; }
+            offlineTicks++;
+            if (offlineTicks >= 5) {
+                autoWifiOpened = true;
+                openWifiSettingsInternal();
+                return;
+            }
+            handler.postDelayed(this, 8000);
+        }
+    };
 
     private boolean isOnline() {
         try {
@@ -160,6 +174,25 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         goImmersive();
+        // Returning to the frame (e.g. after joining Wi-Fi) -> refetch right away.
+        if (web != null) {
+            try {
+                web.evaluateJavascript("window.__poke && window.__poke()", null);
+            } catch (Exception ignore) {}
+        }
+    }
+
+    private void applyOrientation() {
+        String o = prefs.getString("orient", "sensor");
+        int mode;
+        if ("portrait".equals(o)) mode = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+        else if ("portrait_rev".equals(o)) mode = ActivityInfo.SCREEN_ORIENTATION_REVERSE_PORTRAIT;
+        else if ("landscape".equals(o)) mode = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
+        else if ("landscape_rev".equals(o)) mode = ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE;
+        else mode = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR;
+        try {
+            setRequestedOrientation(mode);
+        } catch (Exception ignore) {}
     }
 
     @Override
