@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>감탄 액자</title>
+<!--
+  ▤ 감탄 액자 전용 앱(키오스크)용 화면 ▤
+  원본 frame-legacy.html 과 디자인·동작은 동일합니다.
+  다만 Supabase 와의 통신은 앱(네이티브)이 대신 처리합니다:
+    - 사진 목록(POST rpc/frame_manifest)  ->  Android.fetchManifest()  ->  window.__manifest()
+    - 사진/배경 이미지(GET)              ->  앱이 요청을 가로채 인증서 내장으로 직접 받아옴
+  덕분에 안드로이드6 같은 옛 기기에서도 웹뷰 업데이트/인증서 설치 없이 사진이 뜹니다.
+-->
+<style>
+html,body{height:100%;margin:0;background:#000;overflow:hidden}
+body{
+font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-serif;
+-webkit-font-smoothing:antialiased;color:#F2EDE4;
+-webkit-user-select:none;user-select:none;cursor:none;
+}
+#stage{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden;background:#000}
+
+.slot{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;-webkit-transition:opacity 1.2s ease;transition:opacity 1.2s ease}
+.slot.on{opacity:1}
+.panes{position:absolute;top:0;right:0;bottom:0;left:0;display:-webkit-box;display:-webkit-flex;display:flex}
+.pane{position:relative;-webkit-box-flex:1;-webkit-flex:1;flex:1;overflow:hidden}
+.pane + .pane{border-left:1px solid rgba(255,255,255,.08)}
+.pane .bg{
+position:absolute;top:-10%;right:-10%;bottom:-10%;left:-10%;
+background-size:cover;background-position:center;
+-webkit-filter:blur(46px) brightness(.4) saturate(1.1);
+filter:blur(46px) brightness(.4) saturate(1.1);
+}
+.pane img{position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;-o-object-fit:contain;object-fit:contain;display:block}
+
+#sender{
+position:absolute;left:26px;bottom:24px;
+font-size:15px;letter-spacing:.01em;color:rgba(255,255,255,.88);
+text-shadow:0 2px 20px rgba(0,0,0,.85);
+opacity:0;-webkit-transform:translateY(8px);transform:translateY(8px);
+-webkit-transition:opacity .8s ease,-webkit-transform .8s ease;
+transition:opacity .8s ease,transform .8s ease;pointer-events:none;
+}
+#sender.on{opacity:1;-webkit-transform:none;transform:none}
+#sender i{
+display:block;width:24px;height:1px;background:#B08D57;
+margin-bottom:8px;
+}
+
+/* 밤 */
+#night{
+position:absolute;top:0;right:0;bottom:0;left:0;background:#000;opacity:0;pointer-events:none;
+-webkit-transition:opacity 2.5s ease;transition:opacity 2.5s ease;
+}
+#night.on{opacity:1;pointer-events:auto}
+
+/* 안내 */
+#msg{
+position:absolute;top:0;right:0;bottom:0;left:0;
+display:-webkit-box;display:-webkit-flex;display:flex;
+-webkit-box-align:center;-webkit-align-items:center;align-items:center;
+-webkit-box-pack:center;-webkit-justify-content:center;justify-content:center;
+text-align:center;padding:32px;
+}
+#msg .m{font-family:Georgia,serif;font-size:12px;letter-spacing:.42em;
+color:#B08D57;text-transform:uppercase;margin-bottom:18px}
+#msg h1{font-size:19px;font-weight:500;line-height:1.7;color:rgba(255,255,255,.9);margin:0}
+#msg p{margin:9px 0 0;font-size:13px;color:#7C7168;line-height:1.7}
+#msg[hidden]{display:none}
+
+#wifiHelp{margin-top:26px}
+#wifiHelp[hidden]{display:none}
+#whInfo{font-size:13px;color:#8A7F73;line-height:1.9;margin-bottom:16px}
+#whInfo b{color:#F2EDE4;font-weight:600}
+#whBtn{
+font:inherit;font-size:14px;padding:12px 20px;
+background:#F2EDE4;color:#14110F;border:0;border-radius:4px;font-weight:600;cursor:pointer;
+}
+
+/* 숨은 문 */
+#corner{position:absolute;left:0;top:0;width:15%;height:15%;z-index:5;cursor:default}
+#panel{
+position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(10,8,7,.94);z-index:6;
+display:-webkit-box;display:-webkit-flex;display:flex;
+-webkit-box-align:center;-webkit-align-items:center;align-items:center;
+-webkit-box-pack:center;-webkit-justify-content:center;justify-content:center;
+padding:28px;cursor:auto;
+}
+#panel[hidden]{display:none}
+#panel .box{width:100%;max-width:320px;font-size:14px}
+#panel h2{font-size:16px;font-weight:600;margin:0 0 14px}
+#panel dl{margin:0 0 20px;font-size:13px;overflow:hidden}
+#panel dt{float:left;clear:left;width:82px;color:#8A7F73;line-height:1.9}
+#panel dd{margin:0 0 0 96px;color:#F2EDE4;word-break:break-all;line-height:1.9}
+#panel button{
+font:inherit;font-size:14px;padding:11px 16px;margin-right:8px;margin-top:6px;
+background:#F2EDE4;color:#14110F;border:0;border-radius:4px;cursor:pointer;font-weight:600;
+}
+#panel button.ghost{background:transparent;color:#F2EDE4;border:1px solid rgba(242,237,228,.25);font-weight:400}
+
+@media (prefers-reduced-motion:reduce){*{-webkit-transition-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+
+<div id="stage">
+<div class="slot" id="slotA"><div class="panes"></div></div>
+<div class="slot" id="slotB"><div class="panes"></div></div>
+
+<div id="sender"><i></i><span id="senderText"></span></div>
+
+<div id="msg">
+<div>
+<div class="m">Gamtan</div>
+<h1 id="msgTitle">사진을 불러오는 중입니다</h1>
+<p id="msgSub">잠시만 기다려 주세요</p>
+<div id="wifiHelp" hidden>
+<div id="whInfo"></div>
+<button id="whBtn" type="button">와이파이 설정 열기</button>
+</div>
+</div>
+</div>
+
+<div id="night"></div>
+<div id="corner"></div>
+
+<div id="panel" hidden>
+<div class="box">
+<h2>액자 정보</h2>
+<dl>
+<dt>액자 번호</dt><dd id="iCode">—</dd>
+<dt>사진</dt><dd id="iCount">—</dd>
+<dt>마지막 확인</dt><dd id="iSync">—</dd>
+<dt>상태</dt><dd id="iState">—</dd>
+</dl>
+<button id="pRefresh">지금 새로 받기</button>
+<button id="pWifi" class="ghost">와이파이 설정</button>
+<button id="pSetup" class="ghost">액자 설정</button>
+<button id="pClose" class="ghost">닫기</button>
+</div>
+</div>
+</div>
+
+<script>
+/* 액자 토큰은 앱이 주소 뒤 ?t=토큰 으로 넣어줍니다. */
+var FRAME_TOKEN = "";
+
+var POLL_MS = 5 * 60 * 1000;
+
+(function(){
+"use strict";
+
+var qs = getParam("t");
+if(qs) FRAME_TOKEN = qs;
+
+function getParam(name){
+  var s = location.search || "";
+  if(s.charAt(0) === "?") s = s.substring(1);
+  if(!s) return null;
+  var parts = s.split("&");
+  for(var i = 0; i < parts.length; i++){
+    var kv = parts[i].split("=");
+    if(decodeURIComponent(kv[0]) === name){
+      return decodeURIComponent((kv[1] || "").replace(/\+/g, " "));
+    }
+  }
+  return null;
+}
+
+var SB_URL = "https://sdjhvtljrzkvniwdtwir.supabase.co";
+var BUCKET = "frame-photos";
+
+var conf = { interval_sec:30, pair_portrait:true, sleep_from:null, sleep_to:null, code:"—" };
+var photos = [], slides = [], idx = -1, useA = true;
+var timer = null, lastSync = null, lastKey = "", failCount = 0;
+
+var $ = function(id){ return document.getElementById(id); };
+var slotA = $("slotA"), slotB = $("slotB");
+var sender = $("sender"), senderText = $("senderText");
+var msg = $("msg"), night = $("night");
+
+function say(title, sub){
+$("msgTitle").textContent = title;
+$("msgSub").textContent = sub || "";
+msg.hidden = false;
+}
+
+function urlOf(path){
+return SB_URL + "/storage/v1/object/public/" + BUCKET + "/" + path;
+}
+
+function hasBridge(){ return !!(window.Android && window.Android.fetchManifest); }
+
+/* ---------- 창고에서 받아오기 (앱이 대신 호출) ---------- */
+function fetchManifest(){
+try{
+  if(hasBridge()){ window.Android.fetchManifest(FRAME_TOKEN); }
+  else{ onNetFail(); }
+}catch(e){ onNetFail(); }
+}
+
+/* 앱이 결과를 이 함수로 돌려줍니다 (문자열) */
+window.__manifest = function(text){
+if(text === "__NETFAIL__" || text === null || text === ""){ onNetFail(); return; }
+var d = null;
+try{ d = JSON.parse(text); }catch(e){ d = null; }
+onManifest(d);
+};
+
+/* 통신 자체 실패 (와이파이/연결 문제) */
+function onNetFail(){
+failCount++;
+if(!photos.length){
+  say("연결을 기다리는 중입니다", "와이파이를 확인해 주세요");
+  showWifiHelp();
+}
+}
+
+function showWifiHelp(){
+var label = "", phone = "";
+try{
+  if(window.Android && window.Android.getInfo){
+    var o = JSON.parse(window.Android.getInfo() || "{}");
+    label = o.label || ""; phone = o.phone || "";
+  }
+}catch(e){}
+var html = "";
+if(label) html += "액자 번호 <b>" + esc(label) + "</b><br>";
+if(phone) html += "문의 <b>" + esc(phone) + "</b>";
+$("whInfo").innerHTML = html;
+$("wifiHelp").hidden = false;
+}
+
+function esc(s){
+return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+/* 통신은 됐지만 결과 처리 */
+function onManifest(d){
+$("wifiHelp").hidden = true;
+if(!d){
+  failCount++;
+  if(!photos.length) say("액자를 찾지 못했습니다", "사진관에 문의해 주세요");
+  return;
+}
+failCount = 0;
+lastSync = new Date();
+
+conf.code = d.code;
+conf.interval_sec = d.interval_sec || 30;
+conf.pair_portrait = d.pair_portrait !== false;
+conf.sleep_from = d.sleep_from;
+conf.sleep_to = d.sleep_to;
+
+var list = d.photos || [];
+var key = "";
+for(var i = 0; i < list.length; i++){ key += list[i].path + "|"; }
+
+if(!list.length){
+  lastKey = key;
+  photos = []; slides = [];
+  clearInterval(timer); timer = null;
+  slotA.className = "slot"; slotB.className = "slot";
+  say("아직 사진이 없습니다", "가족이 사진을 보내면 여기에 나옵니다");
+  return;
+}
+
+if(key === lastKey && photos.length){ restart(); return; }
+lastKey = key;
+measure(list);
+}
+
+/* ---------- 가로/세로 재기 ---------- */
+function measure(list){
+var out = [], left = list.length;
+for(var i = 0; i < list.length; i++){
+  (function(p, i){
+    var u = urlOf(p.path);
+    var im = new Image();
+    im.onload = im.onerror = function(){
+      var w = im.naturalWidth || 1, h = im.naturalHeight || 1;
+      out[i] = { url:u, by:p.by, name:p.name, portrait: h > w * 1.05 };
+      if(--left === 0){
+        photos = [];
+        for(var k = 0; k < out.length; k++){ if(out[k]) photos.push(out[k]); }
+        build();
+        msg.hidden = true;
+        idx = -1;
+        next();
+        restart();
+      }
+    };
+    im.src = u;
+  })(list[i], i);
+}
+}
+
+function build(){
+slides = [];
+var i = 0;
+while(i < photos.length){
+  if(conf.pair_portrait && photos[i].portrait && photos[i+1] && photos[i+1].portrait){
+    slides.push([photos[i], photos[i+1]]); i += 2;
+  }else{
+    slides.push([photos[i]]); i += 1;
+  }
+}
+}
+
+/* ---------- 넘기기 ---------- */
+function next(){
+if(!slides.length || isNight()) return;
+idx = (idx + 1) % slides.length;
+var group = slides[idx];
+var incoming = useA ? slotA : slotB;
+var outgoing = useA ? slotB : slotA;
+useA = !useA;
+
+var panes = incoming.querySelector(".panes");
+panes.innerHTML = "";
+for(var g = 0; g < group.length; g++){
+  var p = group[g];
+  var pane = document.createElement("div"); pane.className = "pane";
+  var bg = document.createElement("div"); bg.className = "bg";
+  bg.style.backgroundImage = 'url("' + p.url + '")';
+  var im = document.createElement("img"); im.src = p.url; im.alt = "";
+  pane.appendChild(bg); pane.appendChild(im);
+  panes.appendChild(pane);
+}
+
+incoming.className = "slot on";
+outgoing.className = "slot";
+
+var names = [];
+for(var n = 0; n < group.length; n++){
+  var by = group[n].by;
+  if(by && names.indexOf(by) < 0) names.push(by);
+}
+if(names.length){
+  sender.className = "";
+  senderText.textContent = names.join(", ") + "이(가) 보냈어요";
+  setTimeout(function(){ sender.className = "on"; }, 400);
+  setTimeout(function(){ sender.className = ""; }, 6000);
+}
+
+var nx = slides[(idx + 1) % slides.length];
+if(nx){ for(var m = 0; m < nx.length; m++){ var i2 = new Image(); i2.src = nx[m].url; } }
+}
+
+function restart(){
+clearInterval(timer);
+if(slides.length > 1) timer = setInterval(next, conf.interval_sec * 1000);
+}
+
+/* ---------- 밤에 끄기 ---------- */
+function isNight(){
+if(!conf.sleep_from || !conf.sleep_to) return false;
+var d = new Date();
+var now = d.getHours() * 60 + d.getMinutes();
+var a = toMin(conf.sleep_from), b = toMin(conf.sleep_to);
+if(a === b) return false;
+return (a < b) ? (now >= a && now < b) : (now >= a || now < b);
+}
+function toMin(t){
+var p = String(t).split(":");
+return (+p[0]) * 60 + (+p[1] || 0);
+}
+setInterval(function(){
+var on = isNight();
+if(on){ night.className = "on"; clearInterval(timer); timer = null; }
+else{ night.className = ""; if(!timer && slides.length > 1) restart(); }
+}, 20000);
+
+/* ---------- 숨은 문 (왼쪽 위 구석 5번 탭) ---------- */
+var taps = 0, tapTimer = null;
+$("corner").addEventListener("click", function(){
+taps++;
+clearTimeout(tapTimer);
+tapTimer = setTimeout(function(){ taps = 0; }, 2500);
+if(taps >= 5){
+  taps = 0;
+  $("iCode").textContent = conf.code;
+  $("iCount").textContent = photos.length + "장 · 화면 " + slides.length + "개";
+  $("iSync").textContent = lastSync ? lastSync.toLocaleString("ko-KR") : "아직 없음";
+  $("iState").textContent = failCount ? "연결 실패 " + failCount + "회" : "정상";
+  $("panel").hidden = false;
+}
+});
+$("pClose").addEventListener("click", function(){ $("panel").hidden = true; });
+$("pRefresh").addEventListener("click", function(){
+$("panel").hidden = true;
+lastKey = "";
+fetchManifest();
+});
+$("pWifi").addEventListener("click", function(){
+try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}
+});
+$("pSetup").addEventListener("click", function(){
+try{ if(window.Android && window.Android.openSetup) window.Android.openSetup(); }catch(e){}
+});
+$("whBtn").addEventListener("click", function(){
+try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}
+});
+
+/* ---------- 시작 ---------- */
+fetchManifest();
+setInterval(fetchManifest, POLL_MS);
+document.addEventListener("visibilitychange", function(){
+if(!document.hidden) fetchManifest();
+});
+})();
+</script>
+</body>
+</html>

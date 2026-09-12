@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0A0807"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="28dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="감탄 액자 설정"
+            android:textColor="#F2EDE4"
+            android:textSize="22sp"
+            android:paddingBottom="6dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="이 액자의 토큰을 붙여넣어 주세요. 관리 화면 발급 목록의 액자 주소 뒤 ?t= 다음 값입니다."
+            android:textColor="#8A7F73"
+            android:textSize="13sp"
+            android:paddingBottom="22dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="액자 토큰"
+            android:textColor="#B08D57"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/token"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="여기에 토큰 붙여넣기"
+            android:textColor="#F2EDE4"
+            android:textColorHint="#5C544C"
+            android:textSize="15sp"
+            android:inputType="textNoSuggestions"
+            android:layout_marginBottom="18dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="액자 번호 / 이름 (선택)"
+            android:textColor="#B08D57"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="예: GT-0003 따뜻한 액자"
+            android:textColor="#F2EDE4"
+            android:textColorHint="#5C544C"
+            android:textSize="15sp"
+            android:inputType="text"
+            android:layout_marginBottom="18dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="문의 연락처 (선택)"
+            android:textColor="#B08D57"
+            android:textSize="13sp" />
+
+        <EditText
+            android:id="@+id/phone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="예: 감탄사진관 031-000-0000"
+            android:textColor="#F2EDE4"
+            android:textColorHint="#5C544C"
+            android:textSize="15sp"
+            android:inputType="text"
+            android:layout_marginBottom="28dp" />
+
+        <Button
+            android:id="@+id/save"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="저장하고 시작" />
+
+    </LinearLayout>
+</ScrollView>
