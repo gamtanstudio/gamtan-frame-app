@@ -313,6 +313,20 @@ public class MainActivity extends Activity {
             });
         }
 
+        // Escape hatch: open the full Android Settings so the frame is never a trap.
+        @JavascriptInterface
+        public void openAndroidSettings() {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception ignore) {}
+                }
+            });
+        }
+
         @JavascriptInterface
         public String getInfo() {
             try {

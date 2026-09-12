@@ -137,6 +137,7 @@ background:#F2EDE4;color:#14110F;border:0;border-radius:4px;cursor:pointer;font-
 <button id="pRefresh">지금 새로 받기</button>
 <button id="pWifi" class="ghost">와이파이 설정</button>
 <button id="pSetup" class="ghost">액자 설정</button>
+<button id="pAndroid" class="ghost">안드로이드 설정</button>
 <button id="pClose" class="ghost">닫기</button>
 </div>
 </div>
@@ -409,6 +410,9 @@ try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWi
 });
 $("pSetup").addEventListener("click", function(){
 try{ if(window.Android && window.Android.openSetup) window.Android.openSetup(); }catch(e){}
+});
+$("pAndroid").addEventListener("click", function(){
+try{ if(window.Android && window.Android.openAndroidSettings) window.Android.openAndroidSettings(); }catch(e){}
 });
 $("whBtn").addEventListener("click", function(){
 try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}
