@@ -5,6 +5,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -34,6 +36,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -314,22 +317,51 @@ public class MainActivity extends Activity {
             });
         }
 
-        // Escape hatch (PIN-protected): open full Android Settings only with the admin PIN.
-        // The PIN never travels to JS — the page sends what was typed and native compares it.
+        // Escape hatch (PIN-protected): leave the kiosk straight to the real Android
+        // home screen, so it works even without a PC. The PIN never travels to JS.
         @JavascriptInterface
-        public void openAndroidSettings(final String pin) {
+        public void exitToHome(final String pin) {
             final String saved = prefs.getString("admin_pin", "1234");
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    if (saved != null && saved.equals(pin)) {
-                        try {
-                            startActivity(new Intent(Settings.ACTION_SETTINGS)
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                        } catch (Exception ignore) {}
-                    } else {
+                    if (saved == null || !saved.equals(pin)) {
                         Toast.makeText(MainActivity.this, "PIN이 올바르지 않습니다", Toast.LENGTH_SHORT).show();
+                        return;
                     }
+                    // 1) Launch a *different* home launcher directly = the real home screen.
+                    try {
+                        PackageManager pm = getPackageManager();
+                        Intent home = new Intent(Intent.ACTION_MAIN);
+                        home.addCategory(Intent.CATEGORY_HOME);
+                        List<ResolveInfo> list = pm.queryIntentActivities(home, 0);
+                        String me = getPackageName();
+                        if (list != null) {
+                            for (ResolveInfo ri : list) {
+                                if (ri == null || ri.activityInfo == null) continue;
+                                String pkg = ri.activityInfo.packageName;
+                                if (pkg != null && !pkg.equals(me) && !pkg.equals("android")) {
+                                    Intent i = new Intent(Intent.ACTION_MAIN);
+                                    i.addCategory(Intent.CATEGORY_HOME);
+                                    i.setClassName(pkg, ri.activityInfo.name);
+                                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(i);
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (Exception ignore) {}
+                    // 2) Fallback: the "Home app" chooser in Settings.
+                    try {
+                        startActivity(new Intent("android.settings.HOME_SETTINGS")
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        return;
+                    } catch (Exception ignore) {}
+                    // 3) Last resort: full Android settings.
+                    try {
+                        startActivity(new Intent(Settings.ACTION_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception ignore) {}
                 }
             });
         }

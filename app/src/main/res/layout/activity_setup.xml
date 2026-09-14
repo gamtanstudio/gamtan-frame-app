@@ -145,7 +145,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="'안드로이드 설정'으로 나갈 때 필요한 번호. 손님이 못 빠져나가게 막아줍니다. 기본 1234 — 꼭 바꾸세요."
+            android:text="'홈 화면으로 나가기'를 쓸 때 필요한 번호. 손님이 못 빠져나가게 막아줍니다. 기본 1234 — 꼭 바꾸세요."
             android:textColor="#8A7F73"
             android:textSize="12sp"
             android:paddingBottom="6dp" />

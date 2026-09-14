@@ -21,7 +21,7 @@ font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",system-ui,sans-
 }
 #stage{position:fixed;top:0;right:0;bottom:0;left:0;overflow:hidden;background:#000}
 
-.slot{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;-webkit-transition:opacity 2.5s ease-in-out;transition:opacity 2.5s ease-in-out}
+.slot{position:absolute;top:0;right:0;bottom:0;left:0;opacity:0;-webkit-transition:opacity 1.8s ease-in-out;transition:opacity 1.8s ease-in-out}
 .slot.on{opacity:1}
 .panes{position:absolute;top:0;right:0;bottom:0;left:0;display:-webkit-box;display:-webkit-flex;display:flex}
 .pane{position:relative;-webkit-box-flex:1;-webkit-flex:1;flex:1;overflow:hidden}
@@ -110,8 +110,9 @@ display:-webkit-box;display:-webkit-flex;display:flex;
 #pin .sub{font-size:12px;color:#8A7F73;margin-bottom:16px;line-height:1.6}
 #pin .dots{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:26px;letter-spacing:.3em;height:32px;color:#F2EDE4;margin-bottom:4px}
 #pin .err{font-size:12.5px;color:#C98B82;min-height:18px;margin-bottom:10px}
-#pin .pad{display:-webkit-box;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-#pin .pad button{font:inherit;font-size:20px;padding:14px 0;background:rgba(242,237,228,.06);
+#pin .pad{font-size:0;text-align:center}
+#pin .pad button{display:inline-block;box-sizing:border-box;width:30%;margin:1.5%;vertical-align:top;
+font-family:inherit;font-size:22px;padding:16px 0;background:rgba(242,237,228,.06);
 color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:pointer}
 #pin .pad button.act{background:#F2EDE4;color:#14110F;border:0;font-weight:600;font-size:15px}
 #pin .cancel{margin-top:16px;background:transparent;border:0;color:#8A7F73;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
@@ -154,7 +155,7 @@ color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:p
 <button id="pRefresh">지금 새로 받기</button>
 <button id="pWifi" class="ghost">와이파이 설정</button>
 <button id="pSetup" class="ghost">액자 설정</button>
-<button id="pAndroid" class="ghost">안드로이드 설정</button>
+<button id="pAndroid" class="ghost">홈 화면으로 나가기</button>
 <button id="pClose" class="ghost">닫기</button>
 </div>
 </div>
@@ -162,7 +163,7 @@ color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:p
 <div id="pin" hidden>
 <div class="pinbox">
 <h3>관리자 PIN</h3>
-<div class="sub">안드로이드 설정을 열려면<br>관리자 PIN을 입력하세요</div>
+<div class="sub">홈 화면으로 나가려면<br>관리자 PIN을 입력하세요</div>
 <div class="dots" id="pinDots"></div>
 <div class="err" id="pinErr"></div>
 <div class="pad">
@@ -205,7 +206,7 @@ function getParam(name){
 var SB_URL = "https://sdjhvtljrzkvniwdtwir.supabase.co";
 var BUCKET = "frame-photos";
 
-var conf = { interval_sec:30, name_mode:"brief", sleep_from:null, sleep_to:null, code:"—" };
+var conf = { interval_sec:30, name_mode:"brief", sleep_from:null, sleep_to:null, code:"—", message:"" };
 var photos = [], slides = [], idx = -1, useA = true;
 var timer = null, lastSync = null, lastKey = "", failCount = 0;
 var quick = null;
@@ -296,6 +297,7 @@ lastSync = new Date();
 conf.code = d.code;
 conf.interval_sec = d.interval_sec || 30;
 conf.name_mode = d.name_mode || "brief";
+conf.message = d.message || "";
 conf.sleep_from = d.sleep_from;
 conf.sleep_to = d.sleep_to;
 
@@ -374,13 +376,7 @@ for(var g = 0; g < group.length; g++){
 incoming.className = "slot on";
 outgoing.className = "slot";
 
-var names = [];
-for(var n = 0; n < group.length; n++){
-  var by = group[n].by;
-  if(by && names.indexOf(by) < 0) names.push(by);
-}
-var caption = (group.length === 1 && group[0].caption) ? group[0].caption : "";
-var labelText = caption ? caption : (names.length ? names.join(", ") + "이(가) 보냈어요" : "");
+var labelText = conf.message || "";
 if(conf.name_mode !== "off" && labelText){
   sender.className = "";
   senderText.textContent = labelText;
@@ -447,7 +443,7 @@ try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWi
 $("pSetup").addEventListener("click", function(){
 try{ if(window.Android && window.Android.openSetup) window.Android.openSetup(); }catch(e){}
 });
-/* 안드로이드 설정은 관리자 PIN 입력 후에만 (손님 탈출 방지) */
+/* 홈 화면으로 나가기는 관리자 PIN 입력 후에만 (손님 탈출 방지) */
 var pinVal = "";
 function renderPin(){
 var d = "";
@@ -467,7 +463,7 @@ var k = b.getAttribute("data-k");
 if(!k) return;
 if(k === "del"){ pinVal = pinVal.slice(0, -1); renderPin(); return; }
 if(k === "ok"){
-  try{ if(window.Android && window.Android.openAndroidSettings) window.Android.openAndroidSettings(pinVal); }catch(e){}
+  try{ if(window.Android && window.Android.exitToHome) window.Android.exitToHome(pinVal); }catch(e){}
   $("pin").hidden = true; pinVal = "";
   return;
 }
