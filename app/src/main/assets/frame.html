@@ -99,6 +99,23 @@ background:#F2EDE4;color:#14110F;border:0;border-radius:4px;cursor:pointer;font-
 }
 #panel button.ghost{background:transparent;color:#F2EDE4;border:1px solid rgba(242,237,228,.25);font-weight:400}
 
+/* 관리자 PIN 패드 */
+#pin{position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(10,8,7,.97);z-index:7;
+display:-webkit-box;display:-webkit-flex;display:flex;
+-webkit-box-align:center;-webkit-align-items:center;align-items:center;
+-webkit-box-pack:center;-webkit-justify-content:center;justify-content:center;padding:24px;cursor:auto}
+#pin[hidden]{display:none}
+#pin .pinbox{width:100%;max-width:280px;text-align:center}
+#pin h3{font-size:15px;font-weight:600;margin:0 0 4px;color:#F2EDE4}
+#pin .sub{font-size:12px;color:#8A7F73;margin-bottom:16px;line-height:1.6}
+#pin .dots{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:26px;letter-spacing:.3em;height:32px;color:#F2EDE4;margin-bottom:4px}
+#pin .err{font-size:12.5px;color:#C98B82;min-height:18px;margin-bottom:10px}
+#pin .pad{display:-webkit-box;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+#pin .pad button{font:inherit;font-size:20px;padding:14px 0;background:rgba(242,237,228,.06);
+color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:pointer}
+#pin .pad button.act{background:#F2EDE4;color:#14110F;border:0;font-weight:600;font-size:15px}
+#pin .cancel{margin-top:16px;background:transparent;border:0;color:#8A7F73;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
+
 @media (prefers-reduced-motion:reduce){*{-webkit-transition-duration:.01ms !important;transition-duration:.01ms !important}}
 </style>
 </head>
@@ -139,6 +156,22 @@ background:#F2EDE4;color:#14110F;border:0;border-radius:4px;cursor:pointer;font-
 <button id="pSetup" class="ghost">액자 설정</button>
 <button id="pAndroid" class="ghost">안드로이드 설정</button>
 <button id="pClose" class="ghost">닫기</button>
+</div>
+</div>
+
+<div id="pin" hidden>
+<div class="pinbox">
+<h3>관리자 PIN</h3>
+<div class="sub">안드로이드 설정을 열려면<br>관리자 PIN을 입력하세요</div>
+<div class="dots" id="pinDots"></div>
+<div class="err" id="pinErr"></div>
+<div class="pad">
+<button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+<button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+<button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+<button class="act" data-k="del">지움</button><button data-k="0">0</button><button class="act" data-k="ok">확인</button>
+</div>
+<button class="cancel" id="pinCancel">취소</button>
 </div>
 </div>
 </div>
@@ -293,7 +326,7 @@ for(var i = 0; i < list.length; i++){
     var im = new Image();
     im.onload = im.onerror = function(){
       var w = im.naturalWidth || 1, h = im.naturalHeight || 1;
-      out[i] = { url:u, by:p.by, name:p.name, portrait: h > w * 1.05 };
+      out[i] = { url:u, by:p.by, name:p.name, caption:p.caption, portrait: h > w * 1.05 };
       if(--left === 0){
         photos = [];
         for(var k = 0; k < out.length; k++){ if(out[k]) photos.push(out[k]); }
@@ -331,8 +364,9 @@ for(var g = 0; g < group.length; g++){
   var bg = document.createElement("div"); bg.className = "bg";
   bg.style.backgroundImage = 'url("' + p.url + '")';
   var im = document.createElement("img"); im.src = p.url; im.alt = "";
-  /* 세로 사진은 꽉 채우고(cover), 가로 사진은 통째로 보여주기(contain) */
-  im.style.objectFit = p.portrait ? "cover" : "contain";
+  /* 사진 방향이 액자(화면) 방향과 같으면 꽉 채우고(cover), 다르면 통째로(contain) */
+  var screenPortrait = (window.innerHeight >= window.innerWidth);
+  im.style.objectFit = (p.portrait === screenPortrait) ? "cover" : "contain";
   pane.appendChild(bg); pane.appendChild(im);
   panes.appendChild(pane);
 }
@@ -345,9 +379,11 @@ for(var n = 0; n < group.length; n++){
   var by = group[n].by;
   if(by && names.indexOf(by) < 0) names.push(by);
 }
-if(conf.name_mode !== "off" && names.length){
+var caption = (group.length === 1 && group[0].caption) ? group[0].caption : "";
+var labelText = caption ? caption : (names.length ? names.join(", ") + "이(가) 보냈어요" : "");
+if(conf.name_mode !== "off" && labelText){
   sender.className = "";
-  senderText.textContent = names.join(", ") + "이(가) 보냈어요";
+  senderText.textContent = labelText;
   setTimeout(function(){ sender.className = "on"; }, 400);
   if(conf.name_mode !== "always"){
     setTimeout(function(){ sender.className = ""; }, 6000);
@@ -411,8 +447,31 @@ try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWi
 $("pSetup").addEventListener("click", function(){
 try{ if(window.Android && window.Android.openSetup) window.Android.openSetup(); }catch(e){}
 });
+/* 안드로이드 설정은 관리자 PIN 입력 후에만 (손님 탈출 방지) */
+var pinVal = "";
+function renderPin(){
+var d = "";
+for(var i = 0; i < pinVal.length; i++) d += "•";
+$("pinDots").textContent = d;
+}
 $("pAndroid").addEventListener("click", function(){
-try{ if(window.Android && window.Android.openAndroidSettings) window.Android.openAndroidSettings(); }catch(e){}
+$("panel").hidden = true;
+pinVal = ""; renderPin(); $("pinErr").textContent = "";
+$("pin").hidden = false;
+});
+$("pinCancel").addEventListener("click", function(){ $("pin").hidden = true; });
+$("pin").addEventListener("click", function(e){
+var b = e.target;
+if(!b || !b.getAttribute) return;
+var k = b.getAttribute("data-k");
+if(!k) return;
+if(k === "del"){ pinVal = pinVal.slice(0, -1); renderPin(); return; }
+if(k === "ok"){
+  try{ if(window.Android && window.Android.openAndroidSettings) window.Android.openAndroidSettings(pinVal); }catch(e){}
+  $("pin").hidden = true; pinVal = "";
+  return;
+}
+if(pinVal.length < 8){ pinVal += k; renderPin(); }
 });
 $("whBtn").addEventListener("click", function(){
 try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}

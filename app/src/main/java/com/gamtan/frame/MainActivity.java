@@ -15,6 +15,7 @@ import android.os.Looper;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.widget.Toast;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -313,16 +314,22 @@ public class MainActivity extends Activity {
             });
         }
 
-        // Escape hatch: open the full Android Settings so the frame is never a trap.
+        // Escape hatch (PIN-protected): open full Android Settings only with the admin PIN.
+        // The PIN never travels to JS — the page sends what was typed and native compares it.
         @JavascriptInterface
-        public void openAndroidSettings() {
+        public void openAndroidSettings(final String pin) {
+            final String saved = prefs.getString("admin_pin", "1234");
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    try {
-                        startActivity(new Intent(Settings.ACTION_SETTINGS)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                    } catch (Exception ignore) {}
+                    if (saved != null && saved.equals(pin)) {
+                        try {
+                            startActivity(new Intent(Settings.ACTION_SETTINGS)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception ignore) {}
+                    } else {
+                        Toast.makeText(MainActivity.this, "PIN이 올바르지 않습니다", Toast.LENGTH_SHORT).show();
+                    }
                 }
             });
         }

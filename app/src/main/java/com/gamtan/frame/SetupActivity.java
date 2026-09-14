@@ -25,11 +25,13 @@ public class SetupActivity extends Activity {
         final EditText label = findViewById(R.id.label);
         final EditText phone = findViewById(R.id.phone);
         final RadioGroup orient = findViewById(R.id.orient);
+        final EditText adminpin = findViewById(R.id.adminpin);
         Button save = findViewById(R.id.save);
 
         token.setText(prefs.getString("token", ""));
         label.setText(prefs.getString("label", ""));
         phone.setText(prefs.getString("phone", ""));
+        adminpin.setText(prefs.getString("admin_pin", "1234"));
 
         String o = prefs.getString("orient", "sensor");
         int checkId = R.id.o_sensor;
@@ -54,11 +56,15 @@ public class SetupActivity extends Activity {
                 else if (id == R.id.o_landscape) ov = "landscape";
                 else if (id == R.id.o_landscape_rev) ov = "landscape_rev";
 
+                String pinv = adminpin.getText().toString().trim();
+                if (pinv.isEmpty()) pinv = "1234";
+
                 prefs.edit()
                         .putString("token", t)
                         .putString("label", label.getText().toString().trim())
                         .putString("phone", phone.getText().toString().trim())
                         .putString("orient", ov)
+                        .putString("admin_pin", pinv)
                         .apply();
 
                 Intent i = new Intent(SetupActivity.this, MainActivity.class);
