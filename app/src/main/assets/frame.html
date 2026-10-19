@@ -367,8 +367,8 @@ for(var g = 0; g < group.length; g++){
   bg.style.backgroundImage = 'url("' + p.url + '")';
   var im = document.createElement("img"); im.src = p.url; im.alt = "";
   /* 사진 방향이 액자(화면) 방향과 같으면 꽉 채우고(cover), 다르면 통째로(contain) */
-  var screenPortrait = (window.innerHeight >= window.innerWidth);
-  im.style.objectFit = (p.portrait === screenPortrait) ? "cover" : "contain";
+  /* 경쟁사처럼 여백 없이 꽉 채우기(가장자리만 살짝 잘림, 중앙 유지) */
+  im.style.objectFit = "cover";
   pane.appendChild(bg); pane.appendChild(im);
   panes.appendChild(pane);
 }

@@ -8,7 +8,10 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -32,12 +35,17 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import java.security.MessageDigest;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -63,6 +71,9 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean autoWifiOpened = false;
     private int offlineTicks = 0;
+    private volatile boolean isResumed = false;
+    private ConnectivityManager.NetworkCallback netCb;
+    private File imgCacheDir;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -83,6 +94,10 @@ public class MainActivity extends Activity {
         }
 
         applyOrientation();
+
+        imgCacheDir = new File(getCacheDir(), "img");
+        if (!imgCacheDir.exists()) imgCacheDir.mkdirs();
+        pruneCache(300L * 1024 * 1024);
 
         web = new WebView(this);
         setContentView(web);
@@ -106,6 +121,21 @@ public class MainActivity extends Activity {
 
         goImmersive();
         scheduleAutoWifi();
+        registerNet();
+
+        getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(
+                new View.OnSystemUiVisibilityChangeListener() {
+                    @Override
+                    public void onSystemUiVisibilityChange(int visibility) {
+                        // If the nav/status bar slid back into view (e.g. a swipe
+                        // from the edge), re-hide it shortly so the kiosk stays full.
+                        if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                            handler.postDelayed(new Runnable() {
+                                @Override public void run() { goImmersive(); }
+                            }, 2000);
+                        }
+                    }
+                });
     }
 
     /**
@@ -171,12 +201,20 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if (netCb != null) {
+            try {
+                ConnectivityManager cm =
+                        (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+                if (cm != null) cm.unregisterNetworkCallback(netCb);
+            } catch (Exception ignore) {}
+        }
         super.onDestroy();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        isResumed = true;
         goImmersive();
         // Returning to the frame (e.g. after joining Wi-Fi) -> refetch right away.
         if (web != null) {
@@ -184,6 +222,50 @@ public class MainActivity extends Activity {
                 web.evaluateJavascript("window.__poke && window.__poke()", null);
             } catch (Exception ignore) {}
         }
+    }
+
+    @Override
+    protected void onPause() {
+        isResumed = false;
+        super.onPause();
+    }
+
+    // Wi-Fi / Internet just came up. Refresh, and if the frame is in the
+    // background (e.g. the person is in the Wi-Fi settings panel), bring it back
+    // to the front by itself so photos resume without anyone touching it.
+    private void onNetworkUp() {
+        if (web != null) {
+            try {
+                web.evaluateJavascript("window.__poke && window.__poke()", null);
+            } catch (Exception ignore) {}
+        }
+        if (!isResumed) {
+            try {
+                Intent i = new Intent(MainActivity.this, MainActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(i);
+            } catch (Throwable ignore) {}
+        }
+    }
+
+    private void registerNet() {
+        try {
+            ConnectivityManager cm =
+                    (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            netCb = new ConnectivityManager.NetworkCallback() {
+                @Override
+                public void onAvailable(Network network) {
+                    handler.post(new Runnable() {
+                        @Override public void run() { onNetworkUp(); }
+                    });
+                }
+            };
+            NetworkRequest req = new NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build();
+            cm.registerNetworkCallback(req, netCb);
+        } catch (Throwable ignore) {}
     }
 
     private void applyOrientation() {
@@ -241,6 +323,11 @@ public class MainActivity extends Activity {
     }
 
     private WebResourceResponse fetchResource(String url) {
+        // 1) Already downloaded before? Serve it from the device, no network.
+        File cf = cacheFileFor(url);
+        WebResourceResponse cached = cachedResponse(cf, url);
+        if (cached != null) return cached;
+
         HttpsURLConnection c = null;
         try {
             URL u = new URL(url);
@@ -255,6 +342,11 @@ public class MainActivity extends Activity {
             String mime = (ct != null && ct.length() > 0) ? ct.split(";")[0].trim() : guessMime(url);
             InputStream in = (code >= 200 && code < 400) ? c.getInputStream() : c.getErrorStream();
             byte[] data = readAll(in);
+
+            // 2) Fresh download succeeded -> keep a copy on the device for next time.
+            if (code >= 200 && code < 400 && data.length > 0) {
+                writeCache(cf, data);
+            }
 
             WebResourceResponse r = new WebResourceResponse(mime, "", new ByteArrayInputStream(data));
             Map<String, String> h = new HashMap<>();
@@ -329,7 +421,16 @@ public class MainActivity extends Activity {
                         Toast.makeText(MainActivity.this, "PIN이 올바르지 않습니다", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    // 1) Launch a *different* home launcher directly = the real home screen.
+                    // 1) Open the "Home app" chooser in Settings. Changing the
+                    //    default launcher there (then rebooting) is the reliable
+                    //    way out of the kiosk for updates — a plain Home jump just
+                    //    gets pulled back, because this app is the default home.
+                    try {
+                        startActivity(new Intent("android.settings.HOME_SETTINGS")
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        return;
+                    } catch (Exception ignore) {}
+                    // 2) Fallback: launch a *different* home launcher directly.
                     try {
                         PackageManager pm = getPackageManager();
                         Intent home = new Intent(Intent.ACTION_MAIN);
@@ -350,12 +451,6 @@ public class MainActivity extends Activity {
                                 }
                             }
                         }
-                    } catch (Exception ignore) {}
-                    // 2) Fallback: the "Home app" chooser in Settings.
-                    try {
-                        startActivity(new Intent("android.settings.HOME_SETTINGS")
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                        return;
                     } catch (Exception ignore) {}
                     // 3) Last resort: full Android settings.
                     try {
@@ -410,6 +505,106 @@ public class MainActivity extends Activity {
         } finally {
             if (c != null) c.disconnect();
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // Image disk cache: a photo is downloaded once, then served from the
+    // device on every later rotation. Without this the frame re-downloads
+    // every photo on every loop, burning Supabase bandwidth 24/7.
+    // ---------------------------------------------------------------------
+    private File cacheFileFor(String url) {
+        String key;
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            byte[] dg = md.digest(url.getBytes("UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : dg) sb.append(String.format("%02x", b));
+            key = sb.toString();
+        } catch (Exception e) {
+            key = Integer.toHexString(url.hashCode());
+        }
+        return new File(imgCacheDir, key);
+    }
+
+    private WebResourceResponse cachedResponse(File f, String url) {
+        try {
+            if (imgCacheDir == null) return null;
+            byte[] data = readFile(f);
+            if (data == null || data.length == 0) return null;
+            WebResourceResponse r = new WebResourceResponse(
+                    guessMime(url), "", new ByteArrayInputStream(data));
+            Map<String, String> h = new HashMap<>();
+            h.put("Access-Control-Allow-Origin", "*");
+            r.setResponseHeaders(h);
+            try { r.setStatusCodeAndReasonPhrase(200, "OK"); } catch (Throwable ignore) {}
+            return r;
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private void writeCache(File f, byte[] data) {
+        if (imgCacheDir == null || data == null || data.length == 0) return;
+        File tmp = new File(f.getParentFile(), f.getName() + ".tmp");
+        FileOutputStream os = null;
+        try {
+            os = new FileOutputStream(tmp);
+            os.write(data);
+            os.flush();
+            os.close();
+            os = null;
+            if (!tmp.renameTo(f)) tmp.delete();
+        } catch (Throwable e) {
+            try { if (tmp.exists()) tmp.delete(); } catch (Exception ignore) {}
+        } finally {
+            if (os != null) try { os.close(); } catch (Exception ignore) {}
+        }
+    }
+
+    private static byte[] readFile(File f) {
+        if (f == null || !f.exists()) return null;
+        FileInputStream in = null;
+        try {
+            in = new FileInputStream(f);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) != -1) bos.write(buf, 0, n);
+            return bos.toByteArray();
+        } catch (Throwable e) {
+            return null;
+        } finally {
+            if (in != null) try { in.close(); } catch (Exception ignore) {}
+        }
+    }
+
+    // Keep the cache from growing without bound if photos change often over the
+    // frame's life. 150 photos is ~60MB, so 300MB is generous headroom.
+    private void pruneCache(final long capBytes) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (imgCacheDir == null) return;
+                    File[] fs = imgCacheDir.listFiles();
+                    if (fs == null) return;
+                    long total = 0;
+                    for (File f : fs) total += f.length();
+                    if (total <= capBytes) return;
+                    java.util.Arrays.sort(fs, new java.util.Comparator<File>() {
+                        @Override public int compare(File a, File b) {
+                            long d = a.lastModified() - b.lastModified();
+                            return d < 0 ? -1 : (d > 0 ? 1 : 0);
+                        }
+                    });
+                    for (File f : fs) {
+                        if (total <= capBytes) break;
+                        long len = f.length();
+                        if (f.delete()) total -= len;
+                    }
+                } catch (Throwable ignore) {}
+            }
+        }).start();
     }
 
     private static byte[] readAll(InputStream in) throws Exception {
