@@ -391,6 +391,24 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        // Night / "screen off" from the phone: turn the backlight fully off while
+        // the app keeps running (so it can turn itself back on by schedule).
+        @JavascriptInterface
+        public void setScreenOff(final boolean off) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        WindowManager.LayoutParams lp = getWindow().getAttributes();
+                        lp.screenBrightness = off
+                                ? WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_OFF
+                                : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+                        getWindow().setAttributes(lp);
+                    } catch (Exception ignore) {}
+                }
+            });
+        }
+
         @JavascriptInterface
         public void openWifiSettings() {
             runOnUiThread(new Runnable() {
