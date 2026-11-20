@@ -405,15 +405,15 @@ for(var g = 0; g < group.length; g++){
   var bg = document.createElement("div"); bg.className = "bg";
   bg.style.backgroundImage = 'url("' + p.url + '")';
   var im = document.createElement("img"); im.src = p.url; im.alt = "";
-  /* 사진은 항상 통째로 보이게(끝에 있는 사람도 안 잘림). 남는 곳은 흐린 유리 배경.
-     비율이 화면과 거의 같을 때만(잘리는 부분 5% 미만) 꽉 채움 */
+  /* 사진 방향이 화면과 같으면(세로 사진↔세로 액자) 꽉 채움 — 양옆만 조금 잘림.
+     방향이 다르면(가로 사진↔세로 액자) 통째로 + 흐린 유리 배경 */
   im.style.objectFit = "contain";
   (function(im, pane){
     im.onload = function(){
       try{
         var ir = im.naturalWidth / im.naturalHeight;
         var pr = pane.clientWidth / pane.clientHeight;
-        if(ir > 0 && pr > 0 && Math.min(ir, pr) / Math.max(ir, pr) >= 0.95) im.style.objectFit = "cover";
+        if(ir > 0 && pr > 0 && Math.min(ir, pr) / Math.max(ir, pr) >= 0.8) im.style.objectFit = "cover";
       }catch(e){}
     };
   })(im, pane);
