@@ -8,6 +8,14 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.ConnectivityManager;
+import android.net.wifi.ScanResult;
+import android.net.wifi.SupplicantState;
+import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import org.json.JSONArray;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
@@ -76,6 +84,10 @@ public class MainActivity extends Activity {
     private ConnectivityManager.NetworkCallback netCb;
     private File imgCacheDir;
     private PowerManager.WakeLock cpuLock;
+    // 앱 안 와이파이 연결 상태 (설정 화면으로 나가면 이 기기는 앱을 꺼 버려서 앱 안에서 직접 연결)
+    private volatile String wifiTarget = "";
+    private volatile boolean wifiAuthError = false;
+    private BroadcastReceiver wifiRx;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -126,6 +138,8 @@ public class MainActivity extends Activity {
         goImmersive();
         scheduleAutoWifi();
         registerNet();
+        registerWifiRx();
+        askLocationOnce();
 
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(
                 new View.OnSystemUiVisibilityChangeListener() {
@@ -161,14 +175,160 @@ public class MainActivity extends Activity {
             if (autoWifiOpened) return;
             if (isOnline()) { offlineTicks = 0; return; }
             offlineTicks++;
-            if (offlineTicks >= 5) {
+            if (offlineTicks >= 3) {
                 autoWifiOpened = true;
-                openWifiSettingsInternal();
+                showWifiPanel();
                 return;
             }
             handler.postDelayed(this, 8000);
         }
     };
+
+    private void showWifiPanel() {
+        if (web == null) return;
+        try {
+            web.evaluateJavascript("window.__wifiPanel && window.__wifiPanel()", null);
+        } catch (Throwable ignore) {}
+    }
+
+    private WifiManager wifi() {
+        return (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+    }
+
+    private void askLocationOnce() {
+        // 와이파이 목록을 보려면 안드로이드 6은 위치 권한이 필요함 (출고 때 미리 허용해 둠)
+        try {
+            if (Build.VERSION.SDK_INT >= 23
+                    && checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                       != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.ACCESS_COARSE_LOCATION}, 7);
+            }
+        } catch (Throwable ignore) {}
+    }
+
+    private void registerWifiRx() {
+        try {
+            wifiRx = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, Intent i) {
+                    try {
+                        if (WifiManager.SUPPLICANT_STATE_CHANGED_ACTION.equals(i.getAction())
+                                && i.getIntExtra(WifiManager.EXTRA_SUPPLICANT_ERROR, -1)
+                                   == WifiManager.ERROR_AUTHENTICATING
+                                && !TextUtils.isEmpty(wifiTarget)) {
+                            wifiAuthError = true;
+                        }
+                    } catch (Throwable ignore) {}
+                }
+            };
+            IntentFilter f = new IntentFilter();
+            f.addAction(WifiManager.SUPPLICANT_STATE_CHANGED_ACTION);
+            registerReceiver(wifiRx, f);
+        } catch (Throwable ignore) {}
+    }
+
+    private static String unq(String ssid) {
+        if (ssid == null) return "";
+        if (ssid.length() >= 2 && ssid.startsWith("\"") && ssid.endsWith("\""))
+            return ssid.substring(1, ssid.length() - 1);
+        return ssid;
+    }
+
+    private String wifiScanJson() {
+        JSONArray arr = new JSONArray();
+        try {
+            WifiManager wm = wifi();
+            if (wm == null) return "[]";
+            if (!wm.isWifiEnabled()) wm.setWifiEnabled(true);
+            wm.startScan();
+            List<ScanResult> list = wm.getScanResults();
+            String cur = "";
+            WifiInfo wi = wm.getConnectionInfo();
+            if (wi != null && wi.getSupplicantState() == SupplicantState.COMPLETED) cur = unq(wi.getSSID());
+            Map<String, ScanResult> best = new HashMap<>();
+            if (list != null) {
+                for (ScanResult r : list) {
+                    if (r == null || TextUtils.isEmpty(r.SSID)) continue;
+                    ScanResult b = best.get(r.SSID);
+                    if (b == null || r.level > b.level) best.put(r.SSID, r);
+                }
+            }
+            java.util.ArrayList<ScanResult> sorted = new java.util.ArrayList<>(best.values());
+            java.util.Collections.sort(sorted, new java.util.Comparator<ScanResult>() {
+                @Override public int compare(ScanResult a, ScanResult b) { return b.level - a.level; }
+            });
+            for (ScanResult r : sorted) {
+                String cap = r.capabilities == null ? "" : r.capabilities;
+                String sec = cap.contains("WEP") ? "wep" : ((cap.contains("PSK") || cap.contains("EAP")) ? "psk" : "open");
+                JSONObject o = new JSONObject();
+                o.put("ssid", r.SSID);
+                o.put("bars", WifiManager.calculateSignalLevel(r.level, 4));
+                o.put("sec", sec);
+                o.put("cur", r.SSID.equals(cur));
+                arr.put(o);
+            }
+        } catch (Throwable ignore) {}
+        return arr.toString();
+    }
+
+    private String wifiConnectNow(String ssid, String pw, String sec) {
+        try {
+            WifiManager wm = wifi();
+            if (wm == null || TextUtils.isEmpty(ssid)) return "fail";
+            if (!wm.isWifiEnabled()) wm.setWifiEnabled(true);
+            String q = "\"" + ssid + "\"";
+            WifiConfiguration c = new WifiConfiguration();
+            c.SSID = q;
+            if ("open".equals(sec)) {
+                c.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+            } else if ("wep".equals(sec)) {
+                c.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                c.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+                c.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.SHARED);
+                c.wepKeys[0] = "\"" + pw + "\"";
+                c.wepTxKeyIndex = 0;
+            } else {
+                c.preSharedKey = "\"" + pw + "\"";
+            }
+            int id = -1;
+            List<WifiConfiguration> saved = wm.getConfiguredNetworks();
+            if (saved != null) {
+                for (WifiConfiguration w : saved) {
+                    if (q.equals(w.SSID)) {
+                        // 예전에 저장된 같은 이름은 지우고 새 비밀번호로 다시 만듦 (지울 수 없으면 그대로 사용)
+                        if (!wm.removeNetwork(w.networkId)) id = w.networkId;
+                    }
+                }
+            }
+            if (id == -1) id = wm.addNetwork(c);
+            if (id == -1) return "fail";
+            wifiTarget = ssid;
+            wifiAuthError = false;
+            wm.disconnect();
+            wm.enableNetwork(id, true);
+            wm.reconnect();
+            wm.saveConfiguration();
+            return "ok";
+        } catch (Throwable e) {
+            return "fail";
+        }
+    }
+
+    private String wifiStatusJson() {
+        JSONObject o = new JSONObject();
+        try {
+            WifiManager wm = wifi();
+            WifiInfo wi = wm == null ? null : wm.getConnectionInfo();
+            String ssid = wi == null ? "" : unq(wi.getSSID());
+            String st = wi == null || wi.getSupplicantState() == null ? "" : wi.getSupplicantState().name();
+            o.put("ssid", ssid);
+            o.put("state", st);
+            o.put("online", isOnline());
+            o.put("authError", wifiAuthError);
+            o.put("target", wifiTarget);
+        } catch (Throwable ignore) {}
+        return o.toString();
+    }
 
     private boolean isOnline() {
         try {
@@ -239,6 +399,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         handler.removeCallbacksAndMessages(null);
+        if (wifiRx != null) { try { unregisterReceiver(wifiRx); } catch (Throwable ignore) {} }
         if (netCb != null) {
             try {
                 ConnectivityManager cm =
@@ -475,6 +636,15 @@ public class MainActivity extends Activity {
                 public void run() { openWifiSettingsInternal(); }
             });
         }
+
+        @JavascriptInterface
+        public String wifiScan() { return wifiScanJson(); }
+
+        @JavascriptInterface
+        public String wifiConnect(String ssid, String pw, String sec) { return wifiConnectNow(ssid, pw, sec); }
+
+        @JavascriptInterface
+        public String wifiStatus() { return wifiStatusJson(); }
 
         @JavascriptInterface
         public void openSetup() {
