@@ -212,6 +212,7 @@ public class MainActivity extends Activity {
     }
 
     private void openWifiSettingsInternal() {
+        try { prefs.edit().putBoolean("wifiPending", true).apply(); } catch (Throwable ignore) {}
         wifiSawOffline = !isOnline();
         wifiBackTicks = 0;
         handler.removeCallbacks(wifiBackChecker);
@@ -252,6 +253,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         isResumed = true;
+        try { prefs.edit().putBoolean("wifiPending", false).apply(); } catch (Throwable ignore) {}
         goImmersive();
         // Returning to the frame (e.g. after joining Wi-Fi) -> refetch right away.
         if (web != null) {
