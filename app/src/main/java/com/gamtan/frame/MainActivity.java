@@ -182,7 +182,40 @@ public class MainActivity extends Activity {
         }
     }
 
+    // 와이파이 설정 화면이 떠 있는 동안 3초마다 확인: 끊겨 있다가 연결되면 감탄 화면으로 되돌림.
+    // (안드로이드 6에서 연결 알림이 안 올 때가 있어 따로 확인함)
+    private boolean wifiSawOffline = false;
+    private int wifiBackTicks = 0;
+    private final Runnable wifiBackChecker = new Runnable() {
+        @Override
+        public void run() {
+            if (isResumed) return;
+            if (++wifiBackTicks > 400) return; // 20분 지나면 그만
+            boolean on = isOnline();
+            if (!on) wifiSawOffline = true;
+            if (on && wifiSawOffline) { bringFrameToFront(); return; }
+            handler.postDelayed(this, 3000);
+        }
+    };
+
+    private void bringFrameToFront() {
+        try {
+            android.app.ActivityManager am =
+                    (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+            if (am != null) am.moveTaskToFront(getTaskId(), 0);
+        } catch (Throwable ignore) {}
+        try {
+            Intent i = new Intent(MainActivity.this, MainActivity.class);
+            i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+        } catch (Throwable ignore) {}
+    }
+
     private void openWifiSettingsInternal() {
+        wifiSawOffline = !isOnline();
+        wifiBackTicks = 0;
+        handler.removeCallbacks(wifiBackChecker);
+        handler.postDelayed(wifiBackChecker, 3000);
         // Prefer the lightweight slide-up Wi-Fi panel (Android 10+).
         if (Build.VERSION.SDK_INT >= 29) {
             try {
@@ -243,13 +276,7 @@ public class MainActivity extends Activity {
                 web.evaluateJavascript("window.__poke && window.__poke()", null);
             } catch (Exception ignore) {}
         }
-        if (!isResumed) {
-            try {
-                Intent i = new Intent(MainActivity.this, MainActivity.class);
-                i.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-            } catch (Throwable ignore) {}
-        }
+        if (!isResumed) bringFrameToFront();
     }
 
     private void registerNet() {
