@@ -17,6 +17,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.KeyEvent;
@@ -74,6 +75,7 @@ public class MainActivity extends Activity {
     private volatile boolean isResumed = false;
     private ConnectivityManager.NetworkCallback netCb;
     private File imgCacheDir;
+    private PowerManager.WakeLock cpuLock;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -82,6 +84,8 @@ public class MainActivity extends Activity {
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
 
         prefs = getSharedPreferences("gamtan", Context.MODE_PRIVATE);
 
@@ -405,6 +409,32 @@ public class MainActivity extends Activity {
                                 : WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
                         getWindow().setAttributes(lp);
                     } catch (Exception ignore) {}
+                    PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                    if (pm == null) return;
+                    if (off) {
+                        // Keep the CPU (and the page's 30s check) running, but let the
+                        // display really go to sleep: backlight fully off.
+                        try {
+                            if (cpuLock == null) {
+                                cpuLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "gamtan:cpu");
+                                cpuLock.setReferenceCounted(false);
+                            }
+                            if (!cpuLock.isHeld()) cpuLock.acquire();
+                        } catch (Exception ignore) {}
+                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    } else {
+                        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                        // Wake the display back up (works even if it already slept).
+                        try {
+                            @SuppressWarnings("deprecation")
+                            PowerManager.WakeLock w = pm.newWakeLock(
+                                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK
+                                            | PowerManager.ACQUIRE_CAUSES_WAKEUP
+                                            | PowerManager.ON_AFTER_RELEASE, "gamtan:wake");
+                            w.acquire(5000);
+                        } catch (Exception ignore) {}
+                        try { if (cpuLock != null && cpuLock.isHeld()) cpuLock.release(); } catch (Exception ignore) {}
+                    }
                 }
             });
         }
