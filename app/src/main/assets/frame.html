@@ -117,6 +117,31 @@ color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:p
 #pin .pad button.act{background:#F2EDE4;color:#14110F;border:0;font-weight:600;font-size:15px}
 #pin .cancel{margin-top:16px;background:transparent;border:0;color:#8A7F73;font:inherit;font-size:13px;cursor:pointer;text-decoration:underline}
 
+
+/* 앱 안 와이파이 연결 */
+#wifi{position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(10,8,7,.97);z-index:8;
+display:-webkit-box;display:-webkit-flex;display:flex;
+-webkit-box-align:center;-webkit-align-items:center;align-items:center;
+-webkit-box-pack:center;-webkit-justify-content:center;justify-content:center;padding:20px;cursor:auto}
+#wifi[hidden]{display:none}
+#wifi .wbox{width:100%;max-width:420px;max-height:100%;display:-webkit-box;display:-webkit-flex;display:flex;
+-webkit-box-orient:vertical;-webkit-flex-direction:column;flex-direction:column}
+#wifi h2{font-size:18px;font-weight:600;margin:0 0 4px;color:#F2EDE4}
+#wifi .wsub{font-size:13px;color:#8A7F73;margin-bottom:14px;min-height:18px}
+#wList{overflow-y:auto;-webkit-overflow-scrolling:touch;border-top:1px solid rgba(242,237,228,.12);-webkit-box-flex:1;-webkit-flex:1;flex:1}
+#wList button{display:block;width:100%;text-align:left;font:inherit;font-size:16px;color:#F2EDE4;background:transparent;
+border:0;border-bottom:1px solid rgba(242,237,228,.12);padding:15px 6px;cursor:pointer}
+#wList button .bar{float:right;color:#B08D57;font-size:13px;letter-spacing:1px}
+#wList button.cur{color:#B08D57}
+#wPw[hidden]{display:none}
+#wPw .name{font-size:16px;color:#F2EDE4;margin:6px 0 10px;font-weight:600}
+#wPw input{width:100%;box-sizing:border-box;font:inherit;font-size:18px;padding:12px;border-radius:6px;
+border:1px solid rgba(242,237,228,.3);background:#1c1815;color:#F2EDE4}
+#wPw label{display:block;font-size:13px;color:#8A7F73;margin:10px 0 0}
+#wifi .wbtns{margin-top:14px}
+#wifi .wbtns button{font:inherit;font-size:15px;padding:12px 18px;margin-right:8px;border-radius:5px;cursor:pointer;
+background:#F2EDE4;color:#14110F;border:0;font-weight:600}
+#wifi .wbtns button.ghost{background:transparent;color:#F2EDE4;border:1px solid rgba(242,237,228,.25);font-weight:400}
 @media (prefers-reduced-motion:reduce){*{-webkit-transition-duration:.01ms !important;transition-duration:.01ms !important}}
 </style>
 </head>
@@ -135,7 +160,7 @@ color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:p
 <p id="msgSub">잠시만 기다려 주세요</p>
 <div id="wifiHelp" hidden>
 <div id="whInfo"></div>
-<button id="whBtn" type="button">와이파이 설정 열기</button>
+<button id="whBtn" type="button">와이파이 연결하기</button>
 </div>
 </div>
 </div>
@@ -153,13 +178,31 @@ color:#F2EDE4;border:1px solid rgba(242,237,228,.16);border-radius:10px;cursor:p
 <dt>상태</dt><dd id="iState">—</dd>
 </dl>
 <button id="pRefresh">지금 새로 받기</button>
-<button id="pWifi" class="ghost">와이파이 설정</button>
+<button id="pWifi" class="ghost">와이파이 연결</button>
 <button id="pSetup" class="ghost">액자 설정</button>
 <button id="pAndroid" class="ghost">홈 화면으로 나가기</button>
 <button id="pClose" class="ghost">닫기</button>
 </div>
 </div>
 
+
+<div id="wifi" hidden>
+<div class="wbox">
+<h2>와이파이 연결</h2>
+<div class="wsub" id="wSub"></div>
+<div id="wList"></div>
+<div id="wPw" hidden>
+<div class="name" id="wName"></div>
+<input type="password" id="wPass" autocomplete="off" autocapitalize="off" spellcheck="false">
+<label><input type="checkbox" id="wShow"> 비밀번호 보기</label>
+</div>
+<div class="wbtns">
+<button id="wGo" hidden>연결</button>
+<button id="wBack" class="ghost" hidden>다른 와이파이</button>
+<button id="wClose" class="ghost">닫기</button>
+</div>
+</div>
+</div>
 <div id="pin" hidden>
 <div class="pinbox">
 <h3>관리자 PIN</h3>
@@ -210,6 +253,7 @@ var conf = { interval_sec:30, name_mode:"brief", sleep_from:null, sleep_to:null,
 var photos = [], slides = [], idx = -1, useA = true;
 var timer = null, lastSync = null, lastKey = "", failCount = 0;
 var quick = null;
+var FIT = {};
 
 var $ = function(id){ return document.getElementById(id); };
 var slotA = $("slotA"), slotB = $("slotB");
@@ -330,6 +374,7 @@ for(var i = 0; i < list.length; i++){
     var im = new Image();
     im.onload = im.onerror = function(){
       var w = im.naturalWidth || 1, h = im.naturalHeight || 1;
+      if(im.naturalWidth) FIT[u] = w / h;
       out[i] = { url:u, by:p.by, name:p.name, caption:p.caption, taken_at:p.taken_at, portrait: h > w * 1.05 };
       if(--left === 0){
         photos = [];
@@ -389,7 +434,6 @@ for(var k = 0; k < ordered.length; k++){ slides.push([ordered[k]]); }
 }
 
 /* ---------- 사진 맞춤 ---------- */
-var FIT = {};
 function applyFit(im, pane, ir){
   var pr = (pane.clientWidth || window.innerWidth) / (pane.clientHeight || window.innerHeight);
   im.style.objectFit = (ir > 0 && pr > 0 && Math.min(ir, pr) / Math.max(ir, pr) >= 0.8) ? "cover" : "contain";
@@ -529,9 +573,7 @@ $("panel").hidden = true;
 lastKey = "";
 fetchManifest();
 });
-$("pWifi").addEventListener("click", function(){
-try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}
-});
+$("pWifi").addEventListener("click", function(){ wifiOpen(); });
 $("pSetup").addEventListener("click", function(){
 try{ if(window.Android && window.Android.openSetup) window.Android.openSetup(); }catch(e){}
 });
@@ -561,9 +603,98 @@ if(k === "ok"){
 }
 if(pinVal.length < 8){ pinVal += k; renderPin(); }
 });
-$("whBtn").addEventListener("click", function(){
-try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}
-});
+$("whBtn").addEventListener("click", function(){ wifiOpen(); });
+
+
+/* ---------- 앱 안 와이파이 연결 ----------
+   이 액자는 안드로이드 설정 화면으로 나가면 감탄 앱을 꺼 버려서,
+   와이파이 목록·비밀번호 입력을 앱 안에서 직접 함 */
+var W = { open:false, scanT:null, pollT:null, pick:null, until:0 };
+function hasWifi(){ return !!(window.Android && window.Android.wifiScan); }
+function wSub(t){ $("wSub").textContent = t || ""; }
+function wRender(list){
+  var box = $("wList"); box.innerHTML = "";
+  if(!list.length){ wSub("와이파이를 찾는 중입니다…"); return; }
+  if(!W.pick) wSub("연결할 와이파이를 누르세요");
+  for(var i = 0; i < list.length; i++){
+    (function(n){
+      var b = document.createElement("button");
+      if(n.cur) b.className = "cur";
+      var sig = n.bars >= 3 ? "강함" : (n.bars >= 2 ? "보통" : "약함");
+      b.innerHTML = '<span class="bar">' + sig + '</span>' + esc(n.ssid) + (n.cur ? " · 연결됨" : "");
+      b.addEventListener("click", function(){ wChoose(n); });
+      box.appendChild(b);
+    })(list[i]);
+  }
+}
+function wScan(){
+  if(!W.open || W.pick) return;
+  var list = [];
+  try{ list = JSON.parse(window.Android.wifiScan() || "[]"); }catch(e){}
+  wRender(list);
+}
+function wChoose(n){
+  W.pick = n;
+  $("wList").hidden = true;
+  $("wBack").hidden = false;
+  if(n.sec === "open"){ $("wPw").hidden = true; $("wGo").hidden = true; wConnect(); return; }
+  $("wName").textContent = n.ssid;
+  $("wPass").value = ""; $("wPass").type = "password"; $("wShow").checked = false;
+  $("wPw").hidden = false; $("wGo").hidden = false;
+  wSub("비밀번호를 넣고 연결을 누르세요");
+  setTimeout(function(){ try{ $("wPass").focus(); }catch(e){} }, 200);
+}
+function wBackToList(){
+  W.pick = null;
+  if(W.pollT){ clearInterval(W.pollT); W.pollT = null; }
+  $("wPw").hidden = true; $("wGo").hidden = true; $("wBack").hidden = true;
+  $("wList").hidden = false;
+  wScan();
+}
+function wConnect(){
+  var n = W.pick; if(!n) return;
+  var pw = $("wPass").value;
+  if(n.sec !== "open" && pw.length < 5){ wSub("비밀번호를 확인해 주세요"); return; }
+  var r = "fail";
+  try{ r = window.Android.wifiConnect(n.ssid, pw, n.sec); }catch(e){}
+  if(r !== "ok"){ wSub("연결하지 못했어요. 다시 눌러 주세요"); return; }
+  $("wGo").hidden = true;
+  wSub("연결하는 중입니다…");
+  W.until = Date.now() + 30000;
+  if(W.pollT) clearInterval(W.pollT);
+  W.pollT = setInterval(function(){
+    var st = {};
+    try{ st = JSON.parse(window.Android.wifiStatus() || "{}"); }catch(e){}
+    if(st.authError){ clearInterval(W.pollT); W.pollT = null; $("wGo").hidden = false; wSub("비밀번호가 맞지 않아요. 다시 넣어 주세요"); return; }
+    if(st.online && st.ssid === n.ssid){ clearInterval(W.pollT); W.pollT = null; wSub("연결됐어요"); setTimeout(wifiClose, 800); lastKey = ""; fetchManifest(); return; }
+    if(Date.now() > W.until){ clearInterval(W.pollT); W.pollT = null; $("wGo").hidden = (n.sec === "open"); wSub("연결이 안 됐어요. 비밀번호를 확인하고 다시 눌러 주세요"); }
+  }, 1000);
+}
+function wifiOpen(){
+  if(!hasWifi()){
+    try{ if(window.Android && window.Android.openWifiSettings) window.Android.openWifiSettings(); }catch(e){}
+    return;
+  }
+  $("panel").hidden = true;
+  W.open = true; W.pick = null;
+  $("wifi").hidden = false;
+  wBackToList();
+  if(W.scanT) clearInterval(W.scanT);
+  W.scanT = setInterval(wScan, 4000);
+}
+function wifiClose(){
+  W.open = false; W.pick = null;
+  if(W.scanT){ clearInterval(W.scanT); W.scanT = null; }
+  if(W.pollT){ clearInterval(W.pollT); W.pollT = null; }
+  $("wifi").hidden = true;
+  try{ document.activeElement && document.activeElement.blur(); }catch(e){}
+}
+window.__wifiPanel = function(){ if(!photos.length && !W.open) wifiOpen(); };
+$("wGo").addEventListener("click", wConnect);
+$("wBack").addEventListener("click", wBackToList);
+$("wClose").addEventListener("click", wifiClose);
+$("wPass").addEventListener("keydown", function(e){ if(e.keyCode === 13) wConnect(); });
+$("wShow").addEventListener("change", function(){ $("wPass").type = this.checked ? "text" : "password"; });
 
 /* ---------- 시작 ---------- */
 fetchManifest();
