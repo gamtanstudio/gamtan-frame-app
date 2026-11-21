@@ -249,7 +249,7 @@ function getParam(name){
 var SB_URL = "https://sdjhvtljrzkvniwdtwir.supabase.co";
 var BUCKET = "frame-photos";
 
-var conf = { interval_sec:30, name_mode:"brief", sleep_from:null, sleep_to:null, code:"—", message:"", screen_off:false };
+var conf = { interval_sec:30, name_mode:"brief", sleep_from:null, sleep_to:null, code:"—", message:"", screen_off:false, play_order:"shuffle" };
 var photos = [], slides = [], idx = -1, useA = true;
 var timer = null, lastSync = null, lastKey = "", failCount = 0;
 var quick = null;
@@ -345,10 +345,11 @@ conf.message = d.message || "";
 conf.sleep_from = d.sleep_from;
 conf.sleep_to = d.sleep_to;
 conf.screen_off = !!d.screen_off;
+conf.play_order = d.play_order || "shuffle";
 try{ applyScreen(); }catch(e){}
 
 var list = d.photos || [];
-var key = "";
+var key = conf.play_order + "#";
 for(var i = 0; i < list.length; i++){ key += list[i].path + "|"; }
 
 if(!list.length){
@@ -427,7 +428,20 @@ var mem = [], rest = [];
 for(var i = 0; i < photos.length; i++){
   if(memYears(photos[i].taken_at) > 0) mem.push(photos[i]); else rest.push(photos[i]);
 }
-shuffle(mem); shuffle(rest);
+/* 사진 순서: order = 관리 화면에 올린 순서 / date = 찍은 날짜순(오래된 것부터) / shuffle = 섞기 */
+var mode = conf.play_order;
+if(mode === "date"){
+  var byDate = function(a, b){
+    var ta = a.taken_at ? Date.parse(a.taken_at) : NaN, tb = b.taken_at ? Date.parse(b.taken_at) : NaN;
+    if(isNaN(ta) && isNaN(tb)) return 0;
+    if(isNaN(ta)) return 1;
+    if(isNaN(tb)) return -1;
+    return ta - tb;
+  };
+  mem.sort(byDate); rest.sort(byDate);
+}else if(mode !== "order"){
+  shuffle(mem); shuffle(rest);
+}
 var ordered = mem.concat(rest);
 slides = [];
 for(var k = 0; k < ordered.length; k++){ slides.push([ordered[k]]); }
