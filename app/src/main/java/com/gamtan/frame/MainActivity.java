@@ -207,12 +207,12 @@ public class MainActivity extends Activity {
         } catch (Throwable ignore) {}
     }
 
-    // 자동 업데이트: 1분 뒤 한 번, 그 뒤 1시간마다 확인 (설치는 새벽 2~5시에만)
+    // 자동 업데이트: 10분마다 시계만 보고, 새벽 정해진 시각에 하루 한 번만 서버 확인
     private final Runnable updateChecker = new Runnable() {
         @Override
         public void run() {
             try { Updater.checkAsync(MainActivity.this, false); } catch (Throwable ignore) {}
-            handler.postDelayed(this, 60L * 60 * 1000);
+            handler.postDelayed(this, 10L * 60 * 1000);
         }
     };
 
