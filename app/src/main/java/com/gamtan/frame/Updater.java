@@ -78,8 +78,14 @@ public final class Updater {
 
     private static void check(Context c, boolean force) throws Exception {
         if (!force) {
-            int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
-            if (h < 2 || h >= 5) return;
+            // 하루 한 번, 새벽 2~5시 사이 액자마다 정해진 시각에만 서버 확인 (100대가 한꺼번에 몰리지 않게)
+            Calendar now = Calendar.getInstance();
+            int min = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
+            int slot = 120 + Math.abs(prefs(c).getString("token", "x").hashCode() % 170);
+            if (min < slot || min >= 300) return;
+            String today = new SimpleDateFormat("yyyyMMdd", Locale.US).format(now.getTime());
+            if (today.equals(prefs(c).getString("upd_day", ""))) return;
+            prefs(c).edit().putString("upd_day", today).apply();
         }
         String ch = prefs(c).getString("upd_channel", "latest");
         if (!"beta".equals(ch)) ch = "latest";
