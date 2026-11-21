@@ -39,6 +39,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.app.Activity;
+import android.app.admin.DevicePolicyManager;
+import android.content.ComponentName;
 
 import org.json.JSONObject;
 
@@ -183,6 +185,17 @@ public class MainActivity extends Activity {
             handler.postDelayed(this, 8000);
         }
     };
+
+    /** 기기 주인일 때만: 위 알림창(설정 버튼)·잠금화면 끄기. 관리자 PIN으로 나갈 땐 다시 켬. */
+    private void applyKiosk(boolean on) {
+        try {
+            DevicePolicyManager dpm = (DevicePolicyManager) getSystemService(Context.DEVICE_POLICY_SERVICE);
+            if (dpm == null || !dpm.isDeviceOwnerApp(getPackageName())) return;
+            ComponentName admin = new ComponentName(this, AdminReceiver.class);
+            dpm.setStatusBarDisabled(admin, on);
+            try { dpm.setKeyguardDisabled(admin, on); } catch (Throwable ignore) {}
+        } catch (Throwable ignore) {}
+    }
 
     private void showWifiPanel() {
         if (web == null) return;
@@ -415,6 +428,7 @@ public class MainActivity extends Activity {
         super.onResume();
         isResumed = true;
         try { prefs.edit().putBoolean("wifiPending", false).apply(); } catch (Throwable ignore) {}
+        applyKiosk(true);
         goImmersive();
         // Returning to the frame (e.g. after joining Wi-Fi) -> refetch right away.
         if (web != null) {
@@ -668,6 +682,7 @@ public class MainActivity extends Activity {
                         Toast.makeText(MainActivity.this, "PIN이 올바르지 않습니다", Toast.LENGTH_SHORT).show();
                         return;
                     }
+                    applyKiosk(false);
                     // 1) Open the "Home app" chooser in Settings. Changing the
                     //    default launcher there (then rebooting) is the reliable
                     //    way out of the kiosk for updates — a plain Home jump just
