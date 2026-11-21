@@ -142,6 +142,7 @@ public class MainActivity extends Activity {
         registerNet();
         registerWifiRx();
         askLocationOnce();
+        scheduleUpdate();
 
         getWindow().getDecorView().setOnSystemUiVisibilityChangeListener(
                 new View.OnSystemUiVisibilityChangeListener() {
@@ -204,6 +205,20 @@ public class MainActivity extends Activity {
                 if (!on && locked) stopLockTask();
             } catch (Throwable ignore) {}
         } catch (Throwable ignore) {}
+    }
+
+    // 자동 업데이트: 1분 뒤 한 번, 그 뒤 1시간마다 확인 (설치는 새벽 2~5시에만)
+    private final Runnable updateChecker = new Runnable() {
+        @Override
+        public void run() {
+            try { Updater.checkAsync(MainActivity.this, false); } catch (Throwable ignore) {}
+            handler.postDelayed(this, 60L * 60 * 1000);
+        }
+    };
+
+    private void scheduleUpdate() {
+        handler.removeCallbacks(updateChecker);
+        handler.postDelayed(updateChecker, 60L * 1000);
     }
 
     private void showWifiPanel() {
