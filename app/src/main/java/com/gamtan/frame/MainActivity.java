@@ -194,6 +194,15 @@ public class MainActivity extends Activity {
             ComponentName admin = new ComponentName(this, AdminReceiver.class);
             dpm.setStatusBarDisabled(admin, on);
             try { dpm.setKeyguardDisabled(admin, on); } catch (Throwable ignore) {}
+            // 앱 고정: 아래 ○(홈)·□(최근 앱) 버튼을 막음 (PIN 나가기 때만 풀림)
+            try {
+                dpm.setLockTaskPackages(admin, new String[]{getPackageName()});
+                android.app.ActivityManager am =
+                        (android.app.ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+                boolean locked = am != null && am.isInLockTaskMode();
+                if (on && !locked) startLockTask();
+                if (!on && locked) stopLockTask();
+            } catch (Throwable ignore) {}
         } catch (Throwable ignore) {}
     }
 
