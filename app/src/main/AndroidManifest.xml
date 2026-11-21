@@ -61,6 +61,18 @@
         </receiver>
 
         <receiver
+            android:name=".UpdateReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.gamtan.frame.UPDATE_NOW" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
             android:name=".NetReceiver"
             android:enabled="true"
             android:exported="true">
